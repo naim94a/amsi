@@ -1,0 +1,6 @@
+[package]
+name = "amsi"
+version = "0.1.0"
+authors = ["Naim A. <227396+naim94a@users.noreply.github.com>"]
+
+[dependencies]
