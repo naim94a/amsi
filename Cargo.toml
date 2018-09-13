@@ -1,6 +1,11 @@
 [package]
 name = "amsi"
 version = "0.1.0"
-authors = ["Naim A. <227396+naim94a@users.noreply.github.com>"]
+authors = ["Naim A. <naim94a@gmail.com>"]
+description = "Wrapper for Windows Anti Malware Scan Interface"
+categories = ["os::windows-apis"]
+keywords = ["windows", "ffi", "amsi"]
+license = "MIT"
+readme = "README.md"
 
 [dependencies]

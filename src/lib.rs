@@ -17,6 +17,9 @@
 //! ## Note
 //! This crate only works with Windows 10, or Windows Server 2016 and above due to the API it wraps.
 
+#[cfg(test)]
+mod tests;
+
 type HRESULT = u32;
 type LPCWSTR = *const u16;
 type HAMSICONTEXT = *const u8;
@@ -221,6 +224,3 @@ impl<'a> Drop for AmsiSession<'a> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
