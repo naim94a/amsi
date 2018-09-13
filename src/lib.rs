@@ -1,3 +1,22 @@
+//! # Antimalware Scan Interface
+//! The "Antimalware Scan Interface" is an API by Microsoft, this crate is a safe wrapper for the native API.
+//!
+//! ## Example
+//! ```
+//! extern crate amsi;
+//!
+//! fn main() {
+//!     let malicious_file = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+//!     let ctx = amsi::AmsiContext::new("emailscanner-1.0.0").unwrap();
+//!     let session = ctx.create_session().unwrap();
+//!     let result = session.scan_string(r"C:\eicar-test.txt", malicious_file).unwrap();
+//!     println!("malicious = {}", result.is_malware());
+//! }
+//! ```
+//!
+//! ## Note
+//! This crate only works with Windows 10, or Windows Server 2016 and above due to the API it wraps.
+
 type HRESULT = u32;
 type LPCWSTR = *const u16;
 type HAMSICONTEXT = *const u8;
@@ -20,60 +39,72 @@ extern "system" {
     fn GetLastError() -> DWORD;
 }
 
+/// Represents a Windows Error
 #[derive(Debug)]
 pub struct WinError {
     code: DWORD,
 }
 
 impl WinError {
+    /// Creates a new `WinError`. This function will actually call `GetLastError()`.
     pub fn new() -> WinError {
         Self::from_code(unsafe {
             GetLastError()
         })
     }
 
+    /// Creates a new `WinError` from the specified error code.
     pub fn from_code(code: DWORD) -> WinError {
         WinError{
             code,
         }
     }
 
+    /// Creates a new `WinError` from the specified `HRESULT` code.
     pub fn from_hresult(res: HRESULT) -> WinError {
         Self::from_code(res & 0xffff)
     }
 }
 
+/// A Context that can be used for scanning payloads.
 #[derive(Debug)]
 pub struct AmsiContext {
     ctx: HAMSICONTEXT,
 }
 
+/// Represents a scan session.
 #[derive(Debug)]
 pub struct AmsiSession<'a> {
     ctx: &'a AmsiContext,
     session: HAMSISESSION,
 }
 
+/// Allows you to tell if a scan result is malicious or not.
+///
+/// This structure is returned by scan functions.
 #[derive(Debug)]
 pub struct AmsiResult {
     code: u32,
 }
 
 impl AmsiResult {
-    pub fn new(code: u32) -> AmsiResult {
+    pub(crate) fn new(code: u32) -> AmsiResult {
         AmsiResult{
             code,
         }
     }
 
+    /// Returns `true` if the result is malicious.
     pub fn is_malware(&self) -> bool {
         self.code >= 32768
     }
 
+    /// Returns `true` if the result is not malicious and will probably never be.
     pub fn is_clean(&self) -> bool {
         self.code == 0
     }
 
+    /// Returns `true` if the result is not malicious, but might be malicious with future definition updates.
     pub fn is_not_detected(&self) -> bool {
         self.code == 1
     }
@@ -88,6 +119,10 @@ impl AmsiResult {
 }
 
 impl AmsiContext {
+    /// Creates a new AMSI context.
+    ///
+    /// ## Parameters
+    /// * **app_name** - name, version or GUID of the application using AMSI API.
     pub fn new(app_name: &str) -> Result<AmsiContext, WinError> {
         let name_utf16: Vec<u16> = app_name.encode_utf16().chain(std::iter::once(0)).collect();
 
@@ -107,6 +142,7 @@ impl AmsiContext {
         }
     }
 
+    /// Creates a scan session from the current context.
     pub fn create_session<'a>(&self) -> Result<AmsiSession, WinError> {
         unsafe {
             let mut session = std::mem::zeroed::<HAMSISESSION>();
@@ -124,6 +160,13 @@ impl AmsiContext {
 }
 
 impl<'a> AmsiSession<'a> {
+    /// Scans a string
+    ///
+    /// This is usually useful for scanning scripts.
+    ///
+    /// ## Parameters
+    /// * **content_name** - File name, URL or unique script ID
+    /// * **data** - Content that should be scanned.
     pub fn scan_string(&self, content_name: &str, data: &str) -> Result<AmsiResult, WinError> {
         let name : Vec<u16> = content_name.encode_utf16().chain(std::iter::once(0)).collect();
         let content: Vec<u16> = data.encode_utf16().chain(std::iter::once(0)).collect();
@@ -142,6 +185,11 @@ impl<'a> AmsiSession<'a> {
         }
     }
 
+    /// Scans a buffer
+    ///
+    /// ## Parameters
+    /// * **content_name** - File name, URL or unique script ID.
+    /// * **data** - payload that should be scanned.
     pub fn scan_buffer(&self, content_name: &str, data: &[u8]) -> Result<AmsiResult, WinError> {
         let name: Vec<u16> = content_name.encode_utf16().chain(std::iter::once(0)).collect();
         let mut result = 0;
@@ -175,27 +223,4 @@ impl<'a> Drop for AmsiSession<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn eicar_test() {
-        let eicar_test: &str = r"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
-
-        let ctx = AmsiContext::new("Test").unwrap();
-        let s1 = ctx.create_session().unwrap();
-        let s2 = ctx.create_session().unwrap();
-        let r1 = s1.scan_buffer("eicar-test.txt", eicar_test.as_bytes()).unwrap();
-        let r2 = s2.scan_string("eicar-test.txt", eicar_test).unwrap();
-        assert!(r1.is_malware());
-        assert!(r2.is_malware());
-    }
-
-    #[test]
-    fn clean_test() {
-        let ctx = AmsiContext::new("mytest").unwrap();
-        let s = ctx.create_session().unwrap();
-        let res = s.scan_string("test.txt", "Nothing wrong with this.").unwrap();
-        assert!(res.is_not_detected() || res.is_clean());
-    }
-}
+mod tests;
